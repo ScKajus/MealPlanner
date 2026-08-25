@@ -61,9 +61,17 @@ ingredient as "to buy."
 
 ## Coordinator (`/plan-meals` orchestrator)
 
-- Parses the initial request; invokes `requirements-formalizer` and, if information
-  is missing (no time budget, no serving count, etc.), asks the user directly and
-  waits for confirmation before planning.
+- Parses the initial request and invokes `requirements-formalizer`. Subagents
+  cannot prompt the user themselves — only the coordinator can — so the
+  hand-off works in two passes:
+  1. `requirements-formalizer` writes `requirements.md` with a `## Open
+     Questions` section listing every missing/ambiguous field (no time budget,
+     no serving count, etc.).
+  2. The coordinator surfaces those questions to the user directly and waits
+     for their answers, then re-invokes `requirements-formalizer` with the
+     answers so it can produce a final, gap-free `requirements.md`.
+  If `## Open Questions` comes back empty, the coordinator proceeds straight
+  to planning without a round-trip.
 - Builds the execution plan (which subagents run, in what order/parallel groups)
   based on the confirmed requirements — e.g. no pantry items → skip `pantry-matcher`.
 - Dispatches subagents sequentially or in parallel per the flow above.
@@ -84,7 +92,7 @@ ingredient as "to buy."
 
 | Subagent | Owns artifact | Depends on | Runs |
 |---|---|---|---|
-| `requirements-formalizer` | `requirements.md` | initial request + user Q&A | first, sequential |
+| `requirements-formalizer` | `requirements.md` | initial request; re-invoked with coordinator-collected answers to its `## Open Questions` | first, sequential (may run twice) |
 | `recipe-researcher` | `candidate-recipes.md` | `requirements.md` | parallel w/ pantry-matcher |
 | `pantry-matcher` | `pantry-match.md` | `requirements.md` | parallel w/ recipe-researcher |
 | `nutrition-checker` | `nutrition.md` | `candidate-recipes.md` | sequential |
@@ -94,11 +102,14 @@ ingredient as "to buy."
 | `meal-plan-builder` | `meal-plan.md` | validated artifacts | synthesis |
 | `html-builder` | `meal-plan.html` | approved `meal-plan.md` | final |
 
-- **`requirements-formalizer`** — Formalizes the request and any clarifying Q&A into
-  structured requirements: ingredients on hand, dietary restrictions/allergies,
-  servings, time budget per meal, number of meals/days requested, cooking budget,
-  cuisine preferences, repeat-avoidance rules. Confirms with the user before
-  handing off.
+- **`requirements-formalizer`** — Formalizes the request into structured
+  requirements: ingredients on hand, dietary restrictions/allergies, servings,
+  time budget per meal, number of meals/days requested, cooking budget,
+  cuisine preferences, repeat-avoidance rules. It cannot prompt the user
+  itself; any field it can't determine goes into a `## Open Questions`
+  section instead of being guessed. Once the coordinator collects answers
+  from the user, it re-invokes this agent with those answers to fold in and
+  produce a final `requirements.md` with `## Open Questions` empty.
 - **`recipe-researcher`** — Searches for candidate recipes via the recipe MCP
   server and/or web search. Each candidate includes ingredients, prep/cook time,
   and a real source link (required for the citation gate). Must call out to the
