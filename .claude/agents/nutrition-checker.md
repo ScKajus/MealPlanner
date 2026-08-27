@@ -1,7 +1,7 @@
 ---
 name: nutrition-checker
-description: Looks up calories and macros for every candidate recipe via the nutrition/recipe MCP server or the web, rolls them up per day and per week, flags imbalance, and writes nutrition.md. Runs sequentially after recipe-researcher in the /plan-meals flow. Use when a meal plan's nutritional balance must be checked against gate 5 or a stated calorie target.
-tools: Read, Write, Glob, Grep, WebSearch, WebFetch, mcp__recipe-mcp__*
+description: Collects calories and macros for every candidate recipe - reusing the nutrition panels recipe-researcher already captured and sourcing only the gaps - then rolls them up, flags imbalance, and writes nutrition.md. Runs sequentially after recipe-researcher in the /plan-meals flow. Use when a meal plan's nutritional balance must be checked against gate 5 or a stated calorie target.
+tools: Read, Write, Glob, Grep, WebSearch, WebFetch, mcp__spoonacular__*
 model: inherit
 ---
 
@@ -29,15 +29,29 @@ Write to the artifact path given in your prompt. If the coordinator did not give
 `artifacts/nutrition.md` relative to the project root (`MealPlanner/`). Create the directory by
 writing the file; do not scatter copies elsewhere.
 
-## The hard rule: never invent a nutrition estimate
+## Start from what is already in the artifact
 
-Every figure you emit must trace to something you retrieved in this run.
+`recipe-researcher` fetched every candidate's page and recorded its published panel on the
+candidate's `Nutrition per serving:` line. **Those figures are your first and cheapest source —
+carry them across.** Re-fetching a page that has already been read is the single most expensive
+mistake available to you: recipe pages are the largest documents in the run, and fetching all of
+them twice can cost more than the rest of the pipeline combined.
 
-1. **Prefer the MCP server** (`mcp__recipe-mcp__*`, or the Edamam food MCP if it is connected)
-   when available. Query it first.
-2. **Fall back to `WebSearch` + `WebFetch`** against a nutrition database or the recipe's own
-   published nutrition panel. Fetch the page — do not cite a URL you only saw in a snippet.
-3. Record the source per recipe in its `Source` line.
+So the order is:
+
+1. **Read `candidate-recipes.md`.** Every candidate whose `Nutrition per serving:` line carries
+   figures is done. Copy them, and cite the candidate's own source URL. Do not re-open the page
+   to double-check a figure you were handed.
+2. **Only for candidates reading `not published`**, go and source them:
+   - `mcp__spoonacular__get_recipe_information` with `includeNutrition: true`, when that candidate
+     came from Spoonacular in the first place — one call, and the cheapest path there is.
+   - otherwise `WebSearch` + `WebFetch` against a nutrition database, or the recipe's page if it
+     has a panel the researcher missed. Fetch the page; never cite a snippet.
+   - `mcp__spoonacular__analyze_nutrition` (raw `ingredientList` plus `servings`) is a last
+     resort. It has returned parsed-ingredient data with no macros at all in this project — if
+     one call comes back without a nutrition payload, do not spend a second one confirming it.
+3. Record the source per recipe in its `Source` line, and mark which of the two paths it took:
+   `from candidate artifact` or the lookup you actually performed.
 
 Macros recalled from training data are **not** acceptable. If nothing usable can be retrieved for
 a recipe, write `unavailable` for that recipe's figures and add a `## Blockers` entry — a
@@ -53,7 +67,7 @@ validator branches on presence.
 
 | Section | Contents | Empty value |
 |---|---|---|
-| `## Method` | Which of MCP / web you used, and per-serving vs. whole-recipe handling | — (always present) |
+| `## Method` | How many figures came from the candidate artifact vs. were sourced here, which lookups you ran, and per-serving vs. whole-recipe handling | — (always present) |
 | `## Targets` | The user's stated calorie/macro targets, restated | `not specified` |
 | `## Per Recipe` | Table: recipe, kcal, protein, carbs, fat — **per serving** — plus source | — (always present) |
 | `## Rollups` | Per-day and per-week (or per-plan) totals for the pool as scoped | — (always present) |
@@ -65,7 +79,7 @@ validator branches on presence.
 ```markdown
 | Recipe | kcal | Protein | Carbs | Fat | Source |
 |---|---|---|---|---|---|
-| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://… (recipe MCP) |
+| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://… (spoonacular MCP) |
 ```
 
 All figures are **per serving**, at the serving size in `requirements.md`. State that explicitly
@@ -125,7 +139,7 @@ filenames and agent names must not reach user-facing output.
 ```markdown
 ## Method
 
-Per-serving figures from the recipe MCP server's nutrition fields where present (9 of 12
+Per-serving figures from Spoonacular's `get_recipe_information` nutrition panel where present (9 of 12
 recipes); the remaining 3 from each recipe's published nutrition panel, fetched directly. Where a
 source gave whole-recipe totals, divided by the recipe's stated yield — noted per recipe under
 `## Assumptions`. All figures below are per serving at 2 servings per meal.
@@ -141,7 +155,7 @@ not specified
 
 | Recipe | kcal | Protein | Carbs | Fat | Source |
 |---|---|---|---|---|---|
-| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://www.themealdb.com/meal/52940 (recipe MCP) |
+| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://spoonacular.com/recipes/lemon-garlic-chicken-skillet-654959 (spoonacular MCP) |
 | Sesame Noodle Bowl | 720 kcal | 14 g | 104 g | 24 g | https://… (web) |
 
 ## Rollups

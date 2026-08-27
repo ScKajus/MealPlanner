@@ -1,5 +1,5 @@
 ---
-description: Plan meals from a natural-language request — orchestrates the requirements → research → validation → approval → HTML pipeline.
+description: Plan meals from a natural-language request — orchestrates the requirements → research → selection → costing → approval → HTML pipeline.
 argument-hint: [what you want to eat, what's in your kitchen, constraints]
 allowed-tools: Task, Read, Write, Edit, Glob, Grep, TodoWrite, AskUserQuestion
 model: inherit
@@ -34,6 +34,20 @@ You orchestrate. You do not cook.
 
 Track the run with `TodoWrite` so the user can see where the pipeline is.
 
+### Spend the user's tokens like they are money
+
+Every subagent you dispatch re-reads its inputs from disk, and every artifact is read by several
+agents and again on every retry. That makes three things expensive, in order:
+
+1. **Dispatching an agent that did not need to run** — a stage whose inputs have not changed, a
+   re-run of something already `completed`, a validator pass over artifacts no gate in scope
+   touches.
+2. **Working at pool scope instead of plan scope** — costing nine recipes to cook five.
+3. **Re-fetching a page some earlier agent already fetched.**
+
+The pipeline below is ordered specifically to avoid all three. Do not "helpfully" re-run a stage
+for freshness, and do not paste artifact contents into a prompt — pass the path.
+
 ---
 
 ## Artifact map
@@ -47,10 +61,11 @@ deliverable does not — it goes to the project root.
 | 2a | `recipe-researcher` | `artifacts/candidate-recipes.md` |
 | 2b | `pantry-matcher` | `artifacts/pantry-match.md` |
 | 3 | `nutrition-checker` | `artifacts/nutrition.md` |
-| 4a | `shopping-list-builder` | `artifacts/shopping-list.md` |
-| 4b | `budget-aggregator` | `artifacts/budget.md` |
-| gate | `validator` | `artifacts/validation-report.md` |
-| 5 | `meal-plan-builder` | `artifacts/meal-plan.md` |
+| gate A | `validator` | `artifacts/validation-report.md` |
+| 4 | `meal-plan-builder` | `artifacts/meal-plan.md` |
+| 5a | `shopping-list-builder` | `artifacts/shopping-list.md` |
+| 5b | `budget-aggregator` | `artifacts/budget.md` |
+| gate B | `validator` | `artifacts/validation-report.md` |
 | 6 | `html-builder` | `meal-plan.html` |
 
 State lives at `workflow-state.json` in the project root.
@@ -66,60 +81,85 @@ same file, and never write one of these files yourself.
 
 - **It exists** → this is a resume. Report to the user, in plain language, what is already done
   and where you are picking up. Do **not** re-run any stage marked `completed` — re-read its
-  artifact instead. Resume from the first `pending` or `failed` stage, carrying its recorded
-  retry count forward. If the recorded original request and the new `<request>` differ
-  materially, ask the user whether to resume the old run or start a fresh one; never silently
-  merge two different requests.
+  artifact instead. Resume from the first `pending`, `stale` or `failed` stage, carrying its
+  recorded retry count forward. Any stage left `running` is the casualty of an interrupted run:
+  reset it to `pending` and run it. If the recorded original request and the new `<request>`
+  differ materially, ask the user whether to resume the old run or start a fresh one; never
+  silently merge two different requests.
 - **It does not exist** → new run. Create it with a run ID (`YYYYMMDD-HHMMSS`), the verbatim
   request, every stage `pending`, all retry counts `0`, and `approved: false`.
 
 Update the state file **immediately after every stage completes** — after each artifact write and
-after every approval response. The `post-write-state` hook is meant to do this; write it yourself
-regardless. Hooks can be absent or misconfigured, and a state file that lags is worse than none:
-it makes a resume skip work that never happened. Writes are idempotent — restate the whole file.
+after every approval response. Nothing else does this for you. A state file that lags is worse
+than none: it makes a resume skip work that never happened. Writes are idempotent — restate the
+whole file.
 
 ### State schema
 
 ```json
 {
-  "runId": "20260826-141207",
+  "runId": "20260827-141207",
   "request": "<the user's original request, verbatim>",
   "requirements": { "scope": "5 weeknight dinners", "servings": 2, "timeBudgetMinutes": 30,
-                    "budget": "$60 per week", "hasPantryItems": true },
-  "plan": { "skipped": ["pantry-matcher"], "reason": "no pantry items" },
+                    "budget": "$60 per week", "hasPantryItems": true, "staples": "standard" },
+  "plan": { "skipped": [], "reason": "pantry items present, budget stated" },
   "stages": {
     "requirements-formalizer": { "status": "completed", "artifact": "artifacts/requirements.md", "retries": 0 },
     "recipe-researcher":       { "status": "pending",   "artifact": "artifacts/candidate-recipes.md", "retries": 0 }
   },
-  "gates": { "post-costing": { "attempts": 1, "lastVerdict": "FAIL", "failingGates": [1] } },
+  "gates": { "A": { "attempts": 1, "lastVerdict": "FAIL", "failingGates": [1] },
+             "B": { "attempts": 0, "lastVerdict": null,   "failingGates": [] } },
   "approved": false,
   "approvalHistory": [
-    { "at": "2026-08-26T14:31:00Z", "response": "reject", "feedback": "too much chicken" }
+    { "at": "2026-08-27T14:31:00Z", "response": "reject", "feedback": "too much chicken" }
   ],
   "artifacts": ["artifacts/requirements.md"]
 }
 ```
 
-`status` is one of `pending`, `running`, `completed`, `failed`, `skipped`.
+`status` is one of `pending`, `running`, `completed`, `failed`, `skipped`, `stale`.
+
+**`stale`** means the artifact exists but its inputs have changed underneath it — the normal
+outcome when a retry re-runs something upstream. Treat `stale` exactly like `pending`: it must be
+re-run before anything downstream is trusted. Never leave a superseded stage `completed`.
 
 ---
 
-## Phase 1 — Requirements, in two passes
+## Phase 1 — Requirements, in one pass where possible
 
-1. Invoke `requirements-formalizer` with the verbatim request and the artifact path.
+The required fields are a fixed checklist, not a discovery problem. **Ask for what the request
+does not already answer, before dispatching anything**, so the formalizer runs once instead of
+twice:
+
+| Field | Ask if the request does not say |
+|---|---|
+| Scope | how many meals or days |
+| Servings | how many people |
+| Time budget | max total time per meal |
+| Restrictions & allergies | an explicit answer — silence is not `none` |
+| **Staples** | whether they have the everyday shelf: cooking oil, salt, pepper, common dried herbs and spices |
+
+Use `AskUserQuestion` for the choice-shaped ones and put them in **one round** — never trickle
+them out. Optional fields (budget, cuisine, nutrition targets, repeat avoidance, pantry items) are
+never worth a question; `not specified` is a fine answer for them.
+
+**The staples question is not optional and not skippable.** Without it the pipeline either buys
+cooking oil, salt and pepper at the top of a weekly budget, or assumes a stocked kitchen the user
+does not have. It costs one line in a question you are already asking.
+
+Then:
+
+1. Invoke `requirements-formalizer` with the verbatim request, the answers you collected, and the
+   artifact path.
 2. Read its hand-off: whether `## Open Questions` is empty, and whether `## Pantry Items` is
    `none`.
-3. **If open questions came back**, put them to the user yourself — `AskUserQuestion` for
-   choice-shaped questions (servings, time budget, number of days), plain prose for open-ended
-   ones. Ask them all in one round; do not trickle them out.
-4. Re-invoke `requirements-formalizer` with the user's answers so it folds them into a final,
-   gap-free `requirements.md`. It rewrites the whole file — that is expected.
-5. If `## Open Questions` is empty on the first pass, skip the round-trip entirely and go
-   straight to planning.
+3. **If open questions still came back** — something genuinely ambiguous you did not anticipate —
+   put them to the user, then re-invoke the formalizer with the answers. It rewrites the whole
+   file; that is expected. This second pass should be the exception, not the routine.
 
-The formalizer's required-field gaps are real gaps. **Never answer its questions on the user's
-behalf**, and never let a run proceed with an unresolved allergy question — `Allergies: none
-stated` is not `Allergies: none`, and gate 2 is a safety gate.
+**Never answer the formalizer's questions on the user's behalf**, and never let a run proceed with
+an unresolved allergy question — `Allergies: none stated` is not `Allergies: none`, and gate 2 is
+a safety gate.
 
 ---
 
@@ -130,10 +170,10 @@ reasons in `workflow-state.json`, and tell the user in one short line what you a
 
 | Condition in `requirements.md` | Decision |
 |---|---|
-| `## Pantry Items` is `none` | **Skip `pantry-matcher`.** Tell `shopping-list-builder` explicitly that there is no pantry artifact and every ingredient is to buy |
-| `## Pantry Items` has entries | Run `pantry-matcher` in parallel with `recipe-researcher` |
-| `## Cooking Budget` is `not specified` | Still run `budget-aggregator` — it reports the estimated total with no verdict. Gate 6 becomes `N/A`, not `PASS` |
-| Scope is a single meal | Run the full pipeline anyway, at trivial scope. Gate 3 (repeat avoidance) becomes `N/A` |
+| `## Pantry Items` is `none` **and** `## Staples` is `none` | **Skip `pantry-matcher`.** Tell `shopping-list-builder` explicitly that there is no pantry artifact and every ingredient is to buy |
+| `## Pantry Items` has entries, **or** `## Staples` is `standard` or a list | Run `pantry-matcher` in parallel with `recipe-researcher` — a stocked staples shelf is pantry input even when the user named no ingredients |
+| `## Cooking Budget` is `not specified` | Still run `budget-aggregator` — it reports the totals with no verdict. Gate 6 becomes `N/A`, not `PASS` |
+| Scope is a single meal | Run the full pipeline anyway, at trivial scope. Gate 3 becomes `N/A` |
 | `## Repeat Avoidance` is `none` | Gate 3 is `N/A` |
 
 Skipping is a decision you record, not a shortcut you take quietly. A skipped stage is
@@ -150,25 +190,31 @@ is what makes them actually concurrent.
 ```
 requirements-formalizer
         ▼
-[recipe-researcher, pantry-matcher]          parallel — both need only requirements.md
+[recipe-researcher, pantry-matcher]        parallel — both need only requirements.md
         ▼
-nutrition-checker                            sequential — needs candidate-recipes.md
+nutrition-checker                          reuses the panels the researcher already captured
         ▼
-[shopping-list-builder → budget-aggregator]  budget-aggregator fires on shopping-list-builder's
-                                             completion, not on a whole-group barrier; both are
-                                             independent of nutrition-checker
+validator — pass A                         gates 1, 2, 4, 5 over the candidate pool
         ▼
-validator                                    gate — targeted retry, max 3
+meal-plan-builder                          selects the recipes and assigns days
         ▼
-meal-plan-builder
+shopping-list-builder → budget-aggregator  scoped to the SELECTED recipes
         ▼
-HUMAN APPROVAL ──reject──▶ back to meal-plan-builder with the feedback
+validator — pass B                         gates 3, 6, 7 over the chosen week
+        ▼
+HUMAN APPROVAL ──reject──▶ meal-plan-builder ▶ re-cost ▶ pass B again
         ▼ approve
 html-builder
 ```
 
-`shopping-list-builder` and `budget-aggregator` form a chain, and that chain runs concurrently
-with `nutrition-checker` — do not hold either behind the nutrition stage.
+**Selection precedes costing, and this ordering is not negotiable.** Building a shopping list from
+the candidate pool over-buys by the pool-to-plan ratio, cannot be compared against a weekly
+budget, and guarantees a second full pass of both costing stages once the recipes are picked. If
+you find yourself about to dispatch `shopping-list-builder` before `meal-plan.md` exists, you have
+lost the plot — the plan is its input.
+
+`shopping-list-builder` and `budget-aggregator` are a chain: dispatch the second on the first's
+completion, not at a group barrier.
 
 ### Subagent prompt template
 
@@ -187,20 +233,32 @@ constraint verbatim from `## Blame`; do not paraphrase it into something looser.
 
 ---
 
-## Phase 4 — The validator gate and targeted retry
+## Phase 4 — The validator gates and targeted retry
 
-Invoke `validator` after the costing stage completes, and again after `meal-plan-builder`
-produces a plan (the second pass is where gates 3 and 7 stop being `N/A`). Never show a plan to
-the user that has not passed a validator gate.
+Two passes, each scoped to the gates it can actually judge. Tell `validator` which pass it is
+running so it reads only what that pass covers.
+
+| Pass | Dispatch after | Gates | Reads |
+|---|---|---|---|
+| **A** | `nutrition-checker` | 1, 2, 4, 5 | requirements, candidate-recipes, nutrition |
+| **B** | `budget-aggregator` | 3, 6, 7 (+ 1, 2, 4 re-checked against the chosen recipes) | requirements, meal-plan, shopping-list, budget |
+
+Pass A catches a bad candidate before anything is built on it — the cheapest moment there is.
+Never show a plan to the user that has not passed pass B.
 
 On `FAIL`, read `## Blame`. It names the owning agent, the tightened constraint, and what
 downstream of it is now stale. Then:
 
-1. Re-run **only** the blamed agent(s), with the tightened constraint in the prompt.
-2. Re-run **everything downstream** of them — a stale `budget.md` sitting under fresh recipes is
+1. Mark the blamed stage and everything downstream of it `stale` in `workflow-state.json`.
+2. Re-run **only** the blamed agent(s), with the tightened constraint in the prompt.
+3. Re-run **everything downstream** of them — a stale `budget.md` sitting under a changed plan is
    a wrong plan that passes structurally.
-3. Re-run `validator`.
-4. Increment that gate's attempt count.
+4. Re-run that validator pass. Increment its attempt count.
+
+Note what "downstream" now means: a gate 6 failure blamed on `meal-plan-builder` re-runs the plan,
+then the shopping list, then the costing, then pass B. It does **not** re-run the research or the
+nutrition stages — those are upstream of the selection and are untouched by it. Re-running them
+is the most common way to waste a retry.
 
 **The budget is 3 attempts per gate.** At 3 with the gate still failing: halt that branch, do not
 run `html-builder`, and report to the user in plain language — what could not be satisfied, what
@@ -215,30 +273,39 @@ failure is a correct outcome.
 
 ## Phase 5 — Approval
 
-When `meal-plan.md` passes its gate, present it to the user **in your own words** — the days, the
-recipes, times, the nutrition shape, the shopping total against their budget, and anything the
-validator flagged but passed. Then ask plainly for approve or reject.
+When pass B is green, present the plan to the user **in your own words** — the days, the recipes,
+times, the nutrition shape, and the cost. Then ask plainly for approve or reject.
+
+Give the cost as the **two figures the costing produced**: what the week's food comes to against
+their budget, and separately what any one-time pantry items cost (the bottle of soy sauce, the jar
+of spice). Presenting a single blended number misrepresents a week that is actually affordable and
+invites a rejection the plan does not deserve. If the one-time total is a large fraction of the
+budget, say so — it usually means the recipes each pull in their own condiment, and the user may
+prefer a swap.
 
 Approval is an **explicit response from the user**, and nothing else. Not a "looks good" you
 inferred from tone, not silence, not the plan looking finished, not your own confidence in it.
 
-- **Approve** → set `"approved": true` in `workflow-state.json`, with a timestamp in
-  `approvalHistory`, then run `html-builder`.
+- **Approve** → set `"approved": true` in `workflow-state.json`, with a timestamp and
+  `"response": "approve"` in `approvalHistory`, then run `html-builder`.
 - **Reject** → capture their feedback verbatim into `approvalHistory`, keep `approved: false`,
-  re-invoke `meal-plan-builder` with the feedback, re-run `validator` on the revised plan, and
-  present it again. Loop until approved; there is no attempt limit on this loop.
+  re-invoke `meal-plan-builder` with the feedback, then **re-run the shopping list and the costing
+  and pass B** — a changed plan invalidates all three — and present it again. Loop until approved;
+  there is no attempt limit on this loop.
 
 Only ever write `approved: true` in direct response to a real approve message from the user. The
-`approval-gate-guard` `PreToolUse` hook blocks the HTML write independently, and `html-builder`
-checks the state file itself — three guards, because this is the one gate that must not fail
-open.
+`approval-gate-guard` `PreToolUse` hook independently blocks any write of `meal-plan.html` while
+the state file says otherwise, and `html-builder` checks the state itself — three guards, because
+this is the one gate that must not fail open. Do not attempt to work around the hook if it fires;
+it firing means the approval is not recorded, which means you have a real bug to fix, not an
+obstacle.
 
 ---
 
 ## Phase 6 — Deliverable
 
-Invoke `html-builder` with the approved plan's path and the output path `meal-plan.html`. Then
-tell the user where the file is and what is in it.
+Invoke `html-builder` with the approved plan's path, the shopping list and budget paths, and the
+output path `meal-plan.html`. Then tell the user where the file is and what is in it.
 
 If the plan is later revised and re-approved, re-invoke `html-builder` — it rewrites the whole
 file at the same path. No versioned filenames.
@@ -248,12 +315,11 @@ file at the same path. No versioned filenames.
 ## Talking to the user
 
 Internal machinery stays internal. **Never put artifact filenames, agent names, `artifacts/`
-paths, or gate numbers into user-facing output** — the `no-leak-guard` hook enforces this, and
-your own phrasing should never need it to.
+paths, or gate numbers into user-facing output.**
 
 | Instead of | Say |
 |---|---|
-| "`recipe-researcher` returned 12 candidates" | "I found 12 recipes that fit" |
+| "`recipe-researcher` returned 7 candidates" | "I found 7 recipes that fit" |
 | "Gate 1 failed in `validation-report.md`" | "Two of the recipes ran over your 30-minute limit, so I re-searched" |
 | "Writing `meal-plan.md`" | "Here's the plan" |
 | "`pantry-matcher` skipped" | *(say nothing — it is not a user-facing event)* |
@@ -270,19 +336,25 @@ satisfying a constraint it does not satisfy.
 > minutes cook time, nothing spicy, no repeat proteins two nights in a row, budget $60 for the
 > week.`
 
-1. No `workflow-state.json` → new run `20260826-141207`, all stages `pending`.
-2. `requirements-formalizer` → `## Open Questions`: *"Any dietary restrictions or allergies?"*.
-   Pantry items present.
-3. Ask the user. They answer "no allergies." Re-invoke the formalizer → open questions `none`.
+1. No `workflow-state.json` → new run `20260827-141207`, all stages `pending`.
+2. The request covers scope, servings, time and budget. It does not cover allergies or staples →
+   one `AskUserQuestion` round for both. User: no allergies, standard staples shelf.
+3. `requirements-formalizer` with the request plus both answers → `## Open Questions: none` on the
+   first pass. No round-trip needed.
 4. Plan: pantry items present, so `pantry-matcher` runs. Budget stated, so gate 6 is live. Repeat
    avoidance requested, so gate 3 is live. Nothing skipped.
-5. Dispatch `recipe-researcher` + `pantry-matcher` in one message. Then `nutrition-checker`, and
-   `shopping-list-builder` → `budget-aggregator` concurrently with it.
-6. `validator` → `FAIL`, gate 1: one candidate at 35 minutes. `## Blame`: `recipe-researcher`,
-   re-search at ≤ 25 minutes; downstream re-runs `nutrition-checker`,
-   `shopping-list-builder`, `budget-aggregator`. Attempt 1 of 3.
-7. Re-run exactly those four, then `validator` → `PASS`.
-8. `meal-plan-builder` → `validator` (gates 3 and 7 now live) → `PASS`.
-9. Present the plan. User: *"swap Thursday, I don't want salmon twice in a week."* → record the
-   feedback, re-run `meal-plan-builder`, re-validate, present again.
-10. User approves → `approved: true` → `html-builder` → tell them `meal-plan.html` is ready.
+5. Dispatch `recipe-researcher` + `pantry-matcher` in one message. Researcher returns 7 candidates
+   across 5 proteins, 6 with published nutrition panels, 2 net-new pantry items.
+6. `nutrition-checker` — carries 6 panels across from the candidate artifact, sources only the
+   seventh.
+7. `validator` pass A → `FAIL`, gate 1: one candidate at 35 minutes. `## Blame`:
+   `recipe-researcher`, re-search at ≤ 25 minutes; downstream re-runs `nutrition-checker`.
+   Attempt 1 of 3. Re-run exactly those two, then pass A → `PASS`.
+8. `meal-plan-builder` selects 5 of the 7 and orders the days so no protein repeats.
+9. `shopping-list-builder` over **those 5 recipes** → `budget-aggregator`: $47.20 of food against
+   the $60 budget, plus $11.40 of one-time pantry items.
+10. `validator` pass B → `PASS`.
+11. Present the plan and both figures. User: *"swap Thursday, I don't want salmon twice in a
+    week."* → record the feedback, re-run `meal-plan-builder`, re-cost, re-run pass B, present
+    again.
+12. User approves → `approved: true` → `html-builder` → tell them `meal-plan.html` is ready.

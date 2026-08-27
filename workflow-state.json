@@ -1,0 +1,94 @@
+{
+  "runId": "20260827-145746",
+  "request": "I have chicken breast, broccoli, and rice at home. Two night dinners for 2, max 30 minutes cook time, nothing spicy, no repeat protein, budget $40 for both meals.",
+  "requirements": {
+    "scope": "2 dinners",
+    "servings": 2,
+    "timeBudgetMinutes": 30,
+    "budget": "$40 for both meals",
+    "hasPantryItems": true,
+    "allergies": "none (confirmed by user)",
+    "repeatAvoidance": "no repeat protein across the two dinners",
+    "exclusions": "nothing spicy",
+    "staples": "standard staples confirmed by user: cooking oil, salt, pepper, common dried herbs/spices"
+  },
+  "plan": {
+    "skipped": [],
+    "reason": "pantry items present and staples confirmed standard - pantry-matcher runs; budget stated - gate 6 live; repeat avoidance requested - gate 3 live. Full pipeline."
+  },
+  "stages": {
+    "requirements-formalizer": {
+      "status": "completed",
+      "artifact": "artifacts/requirements.md",
+      "retries": 0
+    },
+    "recipe-researcher": {
+      "status": "completed",
+      "artifact": "artifacts/candidate-recipes.md",
+      "retries": 1
+    },
+    "pantry-matcher": {
+      "status": "completed",
+      "artifact": "artifacts/pantry-match.md",
+      "retries": 0
+    },
+    "nutrition-checker": {
+      "status": "completed",
+      "artifact": "artifacts/nutrition.md",
+      "retries": 1
+    },
+    "meal-plan-builder": {
+      "status": "completed",
+      "artifact": "artifacts/meal-plan.md",
+      "retries": 1
+    },
+    "shopping-list-builder": {
+      "status": "completed",
+      "artifact": "artifacts/shopping-list.md",
+      "retries": 1
+    },
+    "budget-aggregator": {
+      "status": "completed",
+      "artifact": "artifacts/budget.md",
+      "retries": 1
+    },
+    "validator": {
+      "status": "completed",
+      "artifact": "artifacts/validation-report.md",
+      "retries": 2
+    },
+    "html-builder": {
+      "status": "completed",
+      "artifact": "meal-plan.html",
+      "retries": 0
+    }
+  },
+  "gates": {
+    "A": {
+      "attempts": 2,
+      "lastVerdict": "PASS",
+      "failingGates": []
+    },
+    "B": {
+      "attempts": 2,
+      "lastVerdict": "PASS",
+      "failingGates": []
+    }
+  },
+  "approved": true,
+  "approvalHistory": [
+    { "at": "2026-08-27T12:27:26Z", "response": "approve", "feedback": "approve" }
+  ],
+  "artifacts": [
+    "artifacts/requirements.md",
+    "artifacts/candidate-recipes.md",
+    "artifacts/pantry-match.md",
+    "artifacts/nutrition.md",
+    "artifacts/validation-report.md",
+    "artifacts/meal-plan.md",
+    "artifacts/shopping-list.md",
+    "artifacts/budget.md",
+    "artifacts/validation-report.md",
+    "meal-plan.html"
+  ]
+}
