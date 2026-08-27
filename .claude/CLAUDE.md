@@ -80,8 +80,10 @@ A gate whose inputs do not exist yet is `N/A`, never `PASS`.
   reasoning. Policy that would be identical on every run belongs in your prompt, not in your
   artifact.
 - **Never name a skill that does not exist**, and never substitute a different skill for one you
-  were told to use. The only skills in this project are `artifact-validator` and
-  `meal-plan-html-theme-builder`, both under `.claude/skills/`.
+  were told to use. This pipeline uses exactly two: `artifact-validator` and
+  `meal-plan-html-theme-builder`, both under `.claude/skills/`. A third skill,
+  `recipe-html-builder`, also lives there for standalone single-recipe pages outside this
+  pipeline — no subagent here should reach for it.
 - Internal artifact filenames, agent names and gate numbers must never reach user-facing output.
 
 ## MCP
