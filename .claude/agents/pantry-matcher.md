@@ -1,6 +1,6 @@
 ---
 name: pantry-matcher
-description: Normalizes the user's on-hand ingredients from requirements.md into a canonical, quantified pantry inventory and writes pantry-match.md. Runs in the /plan-meals flow in parallel with recipe-researcher, and is skipped entirely when the user listed no pantry items. Use when a meal plan must account for what the user already has at home.
+description: Normalizes the user's on-hand ingredients from requirements.md into a canonical, quantified pantry inventory and writes pantry-match.md. Runs in the /plan-meals flow in parallel with recipe-researcher, and is skipped entirely when the user listed no pantry items. Use when a meal must account for what the user already has at home.
 tools: Read, Write, Glob, Grep
 model: sonnet
 ---
@@ -18,8 +18,8 @@ You are the **sole owner of `pantry-match.md`**. Nothing else.
   execute it may not exist, may be half-written, or may be about to be replaced by a retry.
 - **You do not do the recipe↔pantry subtraction.** Deciding which recipe ingredients are covered
   and which must be bought belongs to `shopping-list-builder`, which consumes both your artifact
-  and `candidate-recipes.md`. Your job is to make that subtraction *possible*: canonical names,
-  real quantities, real units.
+  and `meal-plan.md`. Your job is to make that subtraction *possible*: canonical names, real
+  quantities, real units.
 - You do not read or write `nutrition.md`, `shopping-list.md`, `budget.md`, or `meal-plan.md`.
 - You **cannot ask the user anything.** You are a subagent; only the coordinator talks to the
   user. Anything unresolvable goes under `## Blockers`.
@@ -37,13 +37,13 @@ a `## Blockers` entry, not a judgement call.
 
 ## Staples come from requirements, not from you
 
-`## Pantry Items` is what the user named. `## Staples` is the everyday shelf. They obey different
-coverage rules, so keep them as separate groups in the inventory:
+`## Pantry Items` is what the user named. `## Staples` is the everyday shelf. The shopping stage
+applies different coverage rules to the two, so keep them as separate groups in the inventory:
 
-| Group | Quantity handling |
+| Group | What you record |
 |---|---|
-| Named items | `unspecified` means **partial** coverage — the shopping stage subtracts the first use and buys the rest |
-| Staples | `unspecified` means **full** coverage for every meal. Staples are consumed in trace amounts; a stocked shelf does not run out mid-week and is never bought twice |
+| Named items | The quantity as the user stated it, or `unspecified` when they gave none. Whether that covers what the recipe needs is `shopping-list-builder`'s call, not yours |
+| Staples | Always `unspecified` — staples are consumed in trace amounts and nobody measures their own shelf |
 
 When `## Staples` is `standard`, emit exactly these four rows, categorised `pantry staple`:
 `cooking oil`, `salt`, `black pepper`, `dried herb/spice (common)` — the last being a class-level
@@ -71,11 +71,12 @@ For each item under `## Pantry Items`, produce one inventory row:
 | **As stated** | The user's original wording, verbatim, so the normalization is auditable |
 | **Quantity** | A bare number + explicit unit: `500 g`, `2 pieces`, `1 L`. If the user gave no quantity, write `unspecified` |
 | **Category** | One of: `protein`, `produce`, `grain`, `dairy`, `pantry staple` |
-| **Perishable** | `yes` / `no` — a perishable with an unknown age may not be usable across a whole week |
+| **Perishable** | `yes` / `no` — a perishable of unknown age may not still be good when the meal is actually cooked |
 
 **Never invent a quantity.** `unspecified` is a real, useful value: it tells
-`shopping-list-builder` it cannot safely subtract a full recipe requirement and should treat the
-item as partially covered. A guessed `500 g` produces a shopping list that under-buys.
+`shopping-list-builder` that the amount on hand is unknown, which is a different input to its
+subtraction than a known one. A guessed `500 g` feeds that subtraction a number nobody gave you,
+and the resulting list silently over- or under-buys.
 
 Split compound entries (`chicken and rice` → two rows). Keep distinct forms distinct — `rice` and
 `brown rice` are not interchangeable, so do not collapse them; note the relationship under
@@ -99,8 +100,7 @@ string match wrong:
 - near-matches a recipe might reasonably substitute (`brown rice` on hand vs. `white rice`
   called for) — flagged as a *possible* substitution for the next agent to decide, never applied
   by you,
-- perishables that likely will not survive to the later days of a week-long plan, and roughly how
-  many days each covers,
+- perishables whose age is unknown and that may not still be good when the meal is cooked,
 - anything genuinely ambiguous about a specific row.
 
 **Keep this section short — a handful of bullets.** It is read by two other agents and re-read on
@@ -139,13 +139,10 @@ Given `requirements.md` with pantry items `chicken breast`, `broccoli`, `rice`:
 
 ## Coverage Notes
 
-- Named items (rows 1–3): partial coverage. Staple rows (4–7): full coverage, all meals.
-- `chicken breast` and `broccoli` are perishable and were not dated — assume roughly the first
-  1–2 and 2–3 dinners respectively.
+- `chicken breast` and `broccoli` are perishable and were not dated — usable if the meal is cooked
+  soon, worth confirming otherwise.
 - `rice` is unqualified: a recipe naming a variety (jasmine, basmati, arborio, brown) is a
   flagged possible substitution, not a match.
-- `rice` is unqualified; a recipe calling for a specific variety (arborio, basmati) should not be
-  treated as covered by it.
 
 ## Assumptions
 

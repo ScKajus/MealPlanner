@@ -1,17 +1,19 @@
 ---
 name: recipe-html-builder
-description: Rendering rules and visual template for turning a single recipe (name, ingredients, steps, nutrition, source) into one standalone recipe HTML page. Use when the deliverable is one recipe's own page, not a multi-day meal plan — including recipes outside the /plan-meals pipeline.
+description: Rendering rules and visual template for turning a single recipe (name, ingredients, steps, nutrition, source) into one standalone recipe HTML page with no costs. For recipes OUTSIDE the /plan-meals pipeline — that pipeline renders its own deliverable with meal-plan-html-theme-builder, which this skill never substitutes for.
 ---
 
 # Recipe HTML page
 
 One self-contained `.html` file per recipe. No build step, no external requests — the user opens
-it from disk, and it must render identically offline, printed, and on a phone. This is the
-single-recipe counterpart to `meal-plan-html-theme-builder`: use that skill for a multi-day plan
-with a shopping list and budget, use this one whenever the deliverable is just one dish.
+it from disk, and it must render identically offline, printed, and on a phone.
 
-This skill is not scoped to any particular run's recipes. Any recipe — from a `/plan-meals`
-artifact, a user-supplied recipe, or one you looked up — renders through the same template below.
+**This is not the `/plan-meals` renderer.** That pipeline plans one meal too, and its deliverable
+goes through `meal-plan-html-theme-builder`, which additionally renders the shopping list and the
+EUR costs. The two templates look deliberately alike; they are not interchangeable, and no
+`/plan-meals` subagent may reach for this one. Use this skill when the deliverable is a recipe on
+its own, with no costing attached — a user-supplied recipe, one you looked up, a page written
+outside any pipeline run.
 
 ## Hard constraints
 
@@ -29,7 +31,8 @@ artifact, a user-supplied recipe, or one you looked up — renders through the s
 - **The source link is a real anchor** — `<a href="…" target="_blank" rel="noopener">` — never a
   bare filename or omitted entirely, unless the recipe genuinely has no source (user-authored).
 - **One file per recipe**, named for the dish (`kebab-case-recipe-name.html`), written wherever the
-  user asked for it — never overwriting an existing multi-day `meal-plan.html`.
+  user asked for it — never overwriting an existing `meal-plan.html`, which belongs to a
+  `/plan-meals` run.
 
 ## Document structure
 
@@ -41,8 +44,9 @@ artifact, a user-supplied recipe, or one you looked up — renders through the s
 <footer>   source link
 ```
 
-Keep it to these four sections. Do not add a shopping list, a budget, or a weekly summary strip —
-those belong to a full meal plan, not a single recipe page.
+Keep it to these four sections. Do not add a shopping list, prices, or a cost summary strip —
+those belong to a `/plan-meals` deliverable, which is rendered by `meal-plan-html-theme-builder`,
+not to a standalone recipe page.
 
 ## Palette
 
@@ -59,7 +63,8 @@ those belong to a full meal plan, not a single recipe page.
 }
 ```
 
-Same palette as `meal-plan-html-theme-builder`, so a recipe page and the weekly plan look like one
+Same palette as `meal-plan-html-theme-builder` (minus its `--warn`, which marks an over-budget
+total this skill never renders), so a standalone recipe page and a planned meal look like one
 family if a user has both open. Accent carries the section-header underline and the pill/stat
 values.
 
@@ -68,9 +73,8 @@ values.
 - **Scale ingredient quantities to the serving count actually wanted**, not the source page's
   native yield — state the scaling plainly (e.g. halved from a 4-serving source) rather than
   silently.
-- **If a source ingredient was deliberately left out of a costed/purchased plan** (an optional
-  extra the pantry footprint didn't include), say so in a short note rather than silently dropping
-  it or silently including it as if it were bought.
+- **If you deliberately leave out an ingredient the source lists** (an optional garnish, a
+  component the user said to skip), say so in a short note rather than silently dropping it.
 - Steps are the source's own steps, reworded for the scaled ingredient amounts where a quantity is
   named inline — never re-ordered or invented.
 - Nutrition is the source's published per-serving panel. If none was published, write "not

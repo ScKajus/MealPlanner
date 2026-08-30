@@ -1,9 +1,10 @@
 # Meal Planner
 
 An agentic `/plan-meals` workflow for Claude Code. Give it what's in your fridge, your
-constraints, and a budget; it researches real recipes, checks nutrition, builds a shopping
-list, validates the whole thing against quality gates, and — once you approve — renders a
-meal plan.
+constraints, and a budget; it researches real recipes, picks one, checks its nutrition,
+builds a priced shopping list, validates the whole thing against quality gates, and — once
+you approve — renders **one complete recipe**: ingredients, step-by-step method, per-serving
+nutrition, and what it costs in euro.
 
 The workflow itself is specified in [`.claude/CLAUDE.md`](.claude/CLAUDE.md). This file
 covers **setup**, which is mostly about getting the MCP server connected.
@@ -45,11 +46,13 @@ agents.
 | `search_ingredients` | Ingredient lookup |
 | `get_random_recipes` | Suggestions with optional filtering |
 
-This is not optional garnish. Both [`recipe-researcher`](.claude/agents/recipe-researcher.md)
-and [`nutrition-checker`](.claude/agents/nutrition-checker.md) carry a hard rule — *never
-invent a recipe*, *never invent a nutrition estimate* — with the MCP server as the primary
-path and web search only as fallback. Quality gate 4 (every recipe cites a real source
-link) depends on it.
+Both [`recipe-researcher`](.claude/agents/recipe-researcher.md) and
+[`nutrition-checker`](.claude/agents/nutrition-checker.md) carry a hard rule — *never invent a
+recipe*, *never invent a nutrition estimate*. What satisfies that rule is **retrieval**, from
+either path: web search plus a real page fetch is the primary one, and this server is a secondary
+source worth a query when it is cheap. Quality gate 4 (every recipe cites a real source link) is
+satisfied by a fetched page just as well as by an MCP record, so nothing in the pipeline breaks if
+the server is unregistered — you simply lose the second path.
 
 ### Getting the key
 
@@ -62,10 +65,9 @@ day**, and points are not requests: the API meters per endpoint. A recipe search
 point plus 0.01 per recipe returned (plus 0.025 per recipe when nutrition is included), and
 a recipe lookup costs about 1 point.
 
-`recipe-researcher` over-supplies candidates by only about **1.4×** (5 dinners → 7
-candidates), and treats Spoonacular as a secondary source behind web search + fetch, so a
-week-sized run typically spends well under 10 points — often zero. The quota is unlikely to
-be what limits you.
+`recipe-researcher` retrieves only **3 candidates** per run — one to cook, two as alternates
+— and treats Spoonacular as a secondary source behind web search + fetch, so a run typically
+spends a handful of points, often zero. The quota is unlikely to be what limits you.
 
 Spoonacular has not earned a larger role here: its records frequently report a placeholder
 `readyInMinutes: 45`, so yield against a tight time cap is poor, and `analyze_nutrition`

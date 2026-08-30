@@ -1,6 +1,6 @@
 ---
 name: nutrition-checker
-description: Collects calories and macros for every candidate recipe - reusing the nutrition panels recipe-researcher already captured and sourcing only the gaps - then rolls them up, flags imbalance, and writes nutrition.md. Runs sequentially after recipe-researcher in the /plan-meals flow. Use when a meal plan's nutritional balance must be checked against gate 5 or a stated calorie target.
+description: Collects calories and macros for every candidate recipe - reusing the nutrition panels recipe-researcher already captured and sourcing only the gaps - then compares them against any stated target, flags outliers, and writes nutrition.md. Runs sequentially after recipe-researcher in the /plan-meals flow. Use when a meal's nutrition must be checked against gate 5 or a stated calorie target.
 tools: Read, Write, Glob, Grep, WebSearch, WebFetch, mcp__spoonacular__*
 model: inherit
 ---
@@ -15,7 +15,8 @@ You are the **sole owner of `nutrition.md`**. Nothing else.
 - You read `candidate-recipes.md` (the pool to analyse) and `requirements.md` (servings, and any
   target under `## Nutrition Targets`). Nothing else.
 - You do **not** read `pantry-match.md`, `shopping-list.md`, `budget.md`, or `meal-plan.md`.
-  Which candidates land on which day is `meal-plan-builder`'s decision, taken after you.
+  Which candidate is cooked is `meal-plan-builder`'s decision, taken after you. You describe all
+  three; you do not pick one.
 - You do **not** add, drop, or substitute recipes. If a candidate is nutritionally poor, you flag
   it; re-searching is `recipe-researcher`'s job when the coordinator asks for it.
 - You do **not** give medical or dietary advice. You report figures and mechanical imbalance
@@ -70,8 +71,8 @@ validator branches on presence.
 | `## Method` | How many figures came from the candidate artifact vs. were sourced here, which lookups you ran, and per-serving vs. whole-recipe handling | — (always present) |
 | `## Targets` | The user's stated calorie/macro targets, restated | `not specified` |
 | `## Per Recipe` | Table: recipe, kcal, protein, carbs, fat — **per serving** — plus source | — (always present) |
-| `## Rollups` | Per-day and per-week (or per-plan) totals for the pool as scoped | — (always present) |
-| `## Imbalance Flags` | Gate 5 findings, each naming the recipe or day | `none` |
+| `## Rollups` | The pool's mean and range per serving, and each candidate's standing against any stated target | — (always present) |
+| `## Imbalance Flags` | Gate 5 findings, each naming the recipe | `none` |
 | `## Blockers` | Recipes whose nutrition could not be sourced | `none` |
 
 ### Per-recipe table
@@ -98,20 +99,20 @@ bare number with an explicit unit:
 
 ## Imbalance flags (gate 5)
 
-Gate 5 asks that nutrition is roughly balanced across the plan — no single day wildly skewed, and
-a stated calorie target respected. Raise a flag, each naming the specific recipe or day, when:
+Gate 5 asks that the meal respects a stated target and is not grossly skewed. Raise a flag, each
+naming the specific recipe, when:
 
-- a day's total deviates from a stated calorie target by more than roughly 20%,
-- carbohydrate supplies the overwhelming share of a day's calories with negligible protein,
-- protein is low relative to the number of servings across the plan,
-- one recipe is a large outlier against the rest of the pool.
+- a candidate's per-serving figures deviate from a stated calorie or macro target by more than
+  roughly 20%,
+- carbohydrate supplies the overwhelming share of its calories with negligible protein,
+- it is a large outlier against the other two candidates.
 
-Because you run *before* `meal-plan-builder` assigns recipes to days, compute day-level rollups
-against the pool as currently scoped and say in `## Method` which grouping you assumed. If no
-day assignment exists yet, roll up per-plan and flag per-recipe outliers instead — do not invent
-a schedule.
+You run *before* `meal-plan-builder` picks one, so every figure is per serving and every flag
+names a candidate. **Do not aggregate the three into a combined total** — only one of them will
+ever be cooked, so a pooled sum describes a meal nobody eats. The mean and range in `## Rollups`
+are context for the selection, not a plan total.
 
-Write flags as findings, not verdicts: state the number, the comparison, and the recipe or day.
+Write flags as findings, not verdicts: state the number, the comparison, and the recipe.
 The pass/fail call on gate 5 is `validator`'s.
 
 If `## Nutrition Targets` is `not specified`, do not import an external target. Flag only
@@ -139,13 +140,13 @@ filenames and agent names must not reach user-facing output.
 ```markdown
 ## Method
 
-Per-serving figures from Spoonacular's `get_recipe_information` nutrition panel where present (9 of 12
-recipes); the remaining 3 from each recipe's published nutrition panel, fetched directly. Where a
-source gave whole-recipe totals, divided by the recipe's stated yield — noted per recipe under
-`## Assumptions`. All figures below are per serving at 2 servings per meal.
+Per-serving figures carried from `candidate-recipes.md` where the researcher captured a published
+panel (2 of 3 candidates); the third sourced here via `get_recipe_information` with
+`includeNutrition: true`. Where a source gave whole-recipe totals, divided by the recipe's stated
+yield — noted per recipe under `## Assumptions`. All figures below are per serving at 2 servings.
 
-No day assignment exists yet (`meal-plan-builder` has not run), so rollups are per-plan and
-outliers are flagged per recipe.
+No recipe is selected yet (`meal-plan-builder` has not run), so figures are reported per candidate
+and not aggregated.
 
 ## Targets
 
@@ -155,19 +156,20 @@ not specified
 
 | Recipe | kcal | Protein | Carbs | Fat | Source |
 |---|---|---|---|---|---|
-| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://spoonacular.com/recipes/lemon-garlic-chicken-skillet-654959 (spoonacular MCP) |
-| Sesame Noodle Bowl | 720 kcal | 14 g | 104 g | 24 g | https://… (web) |
+| Lemon Garlic Chicken Skillet | 480 kcal | 42 g | 28 g | 19 g | https://spoonacular.com/recipes/lemon-garlic-chicken-skillet-654959 (from candidate artifact) |
+| Miso Salmon Traybake | 520 kcal | 38 g | 31 g | 24 g | https://… (from candidate artifact) |
+| Sesame Noodle Bowl | 720 kcal | 14 g | 104 g | 24 g | https://… (web, fetched here) |
 
 ## Rollups
 
-- Pool mean: 545 kcal per serving, 31 g protein, 52 g carbs, 21 g fat
-- Range: 410–720 kcal per serving
+- Pool mean: 573 kcal per serving, 31 g protein, 54 g carbs, 22 g fat
+- Range: 480–720 kcal per serving
+- No target stated, so no candidate is measured against one.
 
 ## Imbalance Flags
 
-- Sesame Noodle Bowl: 104 g carbs against 14 g protein — carbohydrate supplies roughly 58% of
-  calories with the lowest protein in the pool. Pairing it with another low-protein day would
-  skew that day noticeably.
+- Sesame Noodle Bowl: 104 g carbs against 14 g protein — carbohydrate supplies roughly 58% of its
+  calories, and it is a 240 kcal outlier above the other two candidates.
 
 ## Blockers
 
