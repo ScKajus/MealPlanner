@@ -203,7 +203,7 @@ meal-plan-builder                          selects the one recipe, carries its f
         ▼
 shopping-list-builder → budget-aggregator  scoped to the SELECTED recipe
         ▼
-validator — pass B                         gates 3, 6, 7 over the chosen meal
+validator — pass B                         gates 3, 6, 7 over the chosen meal (1, 2, 4, 5 re-checked)
         ▼
 HUMAN APPROVAL ──reject──▶ meal-plan-builder ▶ re-cost ▶ pass B again
         ▼ approve
@@ -244,7 +244,7 @@ running so it reads only what that pass covers.
 | Pass | Dispatch after | Gates | Reads |
 |---|---|---|---|
 | **A** | `nutrition-checker` | 1, 2, 4, 5 | requirements, candidate-recipes, nutrition |
-| **B** | `budget-aggregator` | 3 (step provenance), 6 (meal cost), 7 (the plan is complete) — plus 1, 2, 4 re-checked against the chosen recipe | requirements, meal-plan, shopping-list, budget, candidate-recipes |
+| **B** | `budget-aggregator` | 3 (step provenance), 6 (meal cost), 7 (the plan is complete) — plus 1, 2, 4 and 5 re-checked against the chosen recipe | requirements, meal-plan, shopping-list, budget, candidate-recipes |
 
 Pass A catches a bad candidate before anything is built on it — the cheapest moment there is.
 Never show a plan to the user that has not passed pass B.
@@ -298,6 +298,11 @@ of spice). Presenting a single blended number misrepresents a meal that is actua
 invites a rejection the plan does not deserve. If the one-time total is a large fraction of the
 budget, say so — it usually means this recipe needs a condiment the user does not own, and they
 may prefer a different dish.
+
+The one-time figure covers shelf-stable pantry items bought whole for a trace amount, and nothing
+else. If it carries something the recipe actually cooks with — the eggs in the dish, the cheese on
+top — the meal cost you are quoting is understated. Say the honest total, and re-run
+`shopping-list-builder` and `budget-aggregator` before showing the plan again.
 
 Approval is an **explicit response from the user**, and nothing else. Not a "looks good" you
 inferred from tone, not silence, not the plan looking finished, not your own confidence in it.

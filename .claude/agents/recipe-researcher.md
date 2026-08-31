@@ -160,7 +160,7 @@ Always emit `## Search Method`, `## Candidates`, `## Pantry Footprint`, `## Assu
 
 | Section | Contents | Empty value |
 |---|---|---|
-| `## Search Method` | Which of web / MCP you used, and the queries run | — (always present) |
+| `## Search Method` | Which of web / MCP you used, the search shape, and what was discarded — **at most one short paragraph plus a discard tally**. Name at most three representative queries and give the count of the rest; report discards as counts by reason (`4 over the time cap, 2 over the calorie cap`), never one clause per rejected page. Three agents read this file and every retry re-reads it | — (always present) |
 | `## Candidates` | One `###` block per recipe — three of them — schema below | — (a candidate-less run is a blocker) |
 | `## Pantry Footprint` | Each candidate's net-new pantry items and the pool's distinct count | `none` |
 | `## Assumptions` | Each choice you inferred rather than were told, labelled | `none` |

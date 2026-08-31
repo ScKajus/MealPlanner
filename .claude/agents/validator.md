@@ -35,18 +35,22 @@ Write to the artifact path given in your prompt. If the coordinator did not give
 | Pass | When | Gates | Read |
 |---|---|---|---|
 | **A** — pool | after `nutrition-checker`, before selection | 1, 2, 4, 5 | `requirements.md`, `candidate-recipes.md`, `nutrition.md` |
-| **B** — the meal | after costing, before the plan is shown | 3, 6, 7 — plus 1, 2 and 4 re-checked against the chosen recipe only | `requirements.md`, `meal-plan.md`, `shopping-list.md`, `budget.md`, and `candidate-recipes.md` **for gate 3 only** |
+| **B** — the meal | after costing, before the plan is shown | 3, 6, 7 — plus 1, 2, 4 and 5 re-checked against the chosen recipe only | `requirements.md`, `meal-plan.md`, `shopping-list.md`, `budget.md`, and `candidate-recipes.md` **for gate 3 only** |
 
 Pass A catches a bad candidate before anything is built on it — the cheapest moment to catch one.
 Pass B judges the actual meal.
 
-In pass B, re-checking gates 1, 2 and 4 is cheap and worth doing: `meal-plan.md` restates the
-chosen recipe's time and source, so verifying those few lines against `requirements.md` costs
-nothing extra and catches a transcription drift between selection and the pool.
+In pass B, re-checking gates 1, 2, 4 and 5 is cheap and worth doing: `meal-plan.md` restates the
+chosen recipe's time, source and nutrition, so verifying those few lines against `requirements.md`
+costs nothing extra and catches a transcription drift between selection and the pool. Pass B's
+report is the one the user's plan is judged on and the only one that survives the run — leaving
+the nutrition target unjudged there would ship a plan against a stated calorie cap with no verdict
+on it.
 
 **Gate 3 is the one reason to re-open `candidate-recipes.md` in pass B** — you cannot check that
 the plan's steps came from a real page without the block they were supposed to come from. Read
-only the selected recipe's candidate block. Do not use that read to re-derive gates 1, 2 or 4: if
+only the selected recipe's candidate block. Do not use that read to re-derive gates 1, 2, 4 or 5:
+if
 the plan's restated figures disagree with the pool, that disagreement is itself the finding, and
 the plan is what the user acts on.
 
@@ -89,7 +93,7 @@ evidence you do not have.
 | 2 | No recipe violates a stated dietary restriction or allergy | Ingredient lists vs `## Dietary Restrictions` — including **hidden sources** of an allergen (fish sauce, soy sauce, butter in a dairy-free meal) |
 | 3 | Every cooking step traces to the source; none invented | `meal-plan.md` `## Instructions` against the selected recipe's `Instructions:` block in `candidate-recipes.md` |
 | 4 | The recipe cites a real, working source link | `candidate-recipes.md` `Source:` lines |
-| 5 | Nutrition respects a stated target; no gross skew | `nutrition.md` rollups and `## Imbalance Flags` |
+| 5 | Nutrition respects a stated target; no gross skew | pass A: `nutrition.md` rollups and `## Imbalance Flags` across the pool — pass B: `meal-plan.md` `## Nutrition` for the chosen recipe vs `requirements.md` `## Nutrition Targets`. A per-serving figure the plan reports as unavailable is a `FAIL` in pass B when a target was stated: an unmeasured meal cannot be shown to respect it |
 | 6 | **Meal cost** ≤ budget | `budget.md` `## Meal Cost` and `## Verdict`. The one-time pantry total is reported, not judged — do not fold it into the comparison, and do not fail a meal because the user is restocking a shelf |
 | 7 | The plan is one complete meal | `meal-plan.md` has exactly one recipe, and `## Recipe`, `## Ingredients`, `## Instructions` and `## Nutrition` are all populated — not empty, not a placeholder |
 

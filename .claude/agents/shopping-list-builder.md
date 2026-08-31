@@ -84,8 +84,10 @@ in your artifact:
    truffle, coconut, avocado, ghee, butter), a sauce/paste/liquid condiment (soy, fish, oyster,
    Worcestershire, hoisin, curry paste, harissa, miso, tahini, tomato paste, prepared mustard,
    honey, maple syrup, stock or broth), a vinegar of any kind, wine, or a baking/dry good (flour,
-   sugar, cornstarch, breadcrumbs, eggs, dairy, tinned goods, pasta, noodles)? → **buy**, and it
-   is a **one-time pantry purchase** (below).
+   sugar, cornstarch, breadcrumbs, tinned goods, pasta, noodles), eggs or dairy? → **buy**.
+   Whether it is *also* a one-time pantry purchase is a **separate** question, settled by the
+   trace test below. Being off the staple shelf does not by itself make an ingredient a shelf
+   restock — most of this list is ordinary food.
 3. **On the everyday shelf** — neutral or olive cooking oil, salt in any form, pepper in any
    form, or a common supermarket-rack dried herb or ground spice (basil, oregano, thyme, rosemary,
    sage, parsley, dill, bay, Italian seasoning, paprika, cumin, coriander, turmeric, cinnamon,
@@ -102,8 +104,25 @@ An ingredient used in trace amount but sold only in a whole unit — 20 ml of oy
 this meal's food cost in any meaningful sense. The user buys it once and it sits on the shelf for
 months, feeding many dinners after this one.
 
-List every step-2 item in a separate `## One-Time Pantry Purchases` section rather than mixing it
-into `## To Buy`. The meal's food and the shelf restock are different kinds of spending, and
+**That justification is the test.** A buy line is a one-time pantry purchase only when *both* hold:
+
+1. **Trace amount** — the recipe uses roughly a fifth or less of the smallest sellable pack. At a
+   third or more of the pack, this meal is the reason the pack gets bought: it is meal food.
+2. **Keeps for months** — a sealed condiment, sauce, vinegar, wine, spice jar or dry good that
+   genuinely survives until many later dinners. Anything perishable — eggs, dairy, meat, fresh
+   produce, anything with a use-by inside a few weeks — never qualifies, whatever the amount.
+
+Everything else is the meal's food: it goes in `## To Buy`, priced at the whole purchasable unit
+like every other rounded-up line. The split exists to stop a €4 jar bought for one teaspoon from
+distorting a €10 dinner — **not** to move real ingredients off the bill. An ingredient the recipe
+actually cooks with, and that shows up in its nutrition panel, is meal food even when the category
+lists say otherwise: 2 eggs of a 6-count carton is a third of the pack and a third of the dish's
+protein, so it is bought for this meal. Misfiling a substantive ingredient here understates the
+meal cost and can turn a real gate 6 failure into a false `PASS`. When a line is borderline, it is
+meal food.
+
+List every qualifying item in a separate `## One-Time Pantry Purchases` section rather than mixing
+it into `## To Buy`. The meal's food and the shelf restock are different kinds of spending, and
 mixing them is what makes a perfectly reasonable dinner look over budget. For one meal the
 distortion is at its worst: a €4 jar bought for one teaspoon can be a third of the stated budget.
 

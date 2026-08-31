@@ -88,6 +88,14 @@ that under `## Overage Drivers` even on a `PASS`. It is real information: it usu
 recipe needs a specialty condiment the user does not own, which is a selection problem worth
 surfacing before they shop.
 
+**Sanity-check the split before you trust it.** A one-time line is meant to be a trace of a
+shelf-stable pack. If a line is instead perishable (eggs, dairy, meat, produce) or consumes a
+third or more of its pack, it is this meal's food that has been filed in the wrong section — and
+excluding it makes your `## Meal Cost` and the gate 6 verdict wrong. Price it into the meal group
+anyway, say so in `## Assumptions`, and record it under `## Blockers` naming
+`shopping-list-builder` as the agent to re-run. Never report a `PASS` that depends on leaving a
+real ingredient out of the total.
+
 ## Verdict rules (gate 6)
 
 | Situation | `## Verdict` |

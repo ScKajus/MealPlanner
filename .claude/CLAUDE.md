@@ -40,7 +40,7 @@ meal-plan-builder                          selects the one recipe, carries its f
         ▼
 shopping-list-builder → budget-aggregator  scoped to the SELECTED recipe only
         ▼
-validator  — pass B: gates 3, 6, 7 over the chosen meal
+validator  — pass B: gates 3, 6, 7 over the chosen meal (1, 2, 4, 5 re-checked)
         ▼
 HUMAN APPROVAL  ──reject──▶ meal-plan-builder, then re-cost, then pass B again
         ▼ approve
@@ -59,7 +59,7 @@ this pipeline can make.
 | 2 | The recipe violates no stated restriction or allergy (**safety gate**) | A, re-checked in B |
 | 3 | Every cooking step traces to the source page; none invented | B |
 | 4 | The recipe cites a real, retrieved source link | A, re-checked in B |
-| 5 | Nutrition respects any stated target; no gross skew | A |
+| 5 | Nutrition respects any stated target; no gross skew | A, re-checked in B |
 | 6 | The meal's food cost ≤ the stated budget | B |
 | 7 | The plan is one complete meal — recipe, ingredients, steps and nutrition all populated | B |
 
